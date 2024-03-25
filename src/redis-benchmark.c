@@ -104,6 +104,7 @@ static struct config {
     pthread_mutex_t liveclients_mutex;
     pthread_mutex_t is_updating_slots_mutex;
     int resp3; /* use RESP3 */
+    double zipf_shape;
 } config;
 
 typedef struct _client {
@@ -378,11 +379,16 @@ static void randomizeClientKey(client c) {
 
     for (i = 0; i < c->randlen; i++) {
         char *p = c->randptr[i]+11;
-        size_t r = 0;
-        if (config.randomkeys_keyspacelen != 0)
-            r = random() % config.randomkeys_keyspacelen;
-        size_t j;
 
+        size_t r = 0;
+        if (config.randomkeys_keyspacelen != 0) {
+            double z = config.zipf_shape;
+            r = (size_t)ceil(
+                pow(1.0 - drand48() * (1 - 1.0 / pow(config.randomkeys_keyspacelen, z)), -1.0 / z)
+            );
+        }
+
+        size_t j;
         for (j = 0; j < 12; j++) {
             *p = '0'+r%10;
             r/=10;
@@ -1442,6 +1448,8 @@ int parseOptions(int argc, char **argv) {
             config.randomkeys_keyspacelen = atoi(next);
             if (config.randomkeys_keyspacelen < 0)
                 config.randomkeys_keyspacelen = 0;
+        } else if (!strcmp(argv[i],"-z")) {
+            config.zipf_shape = strtod(argv[++i], NULL);
         } else if (!strcmp(argv[i],"-q")) {
             config.quiet = 1;
         } else if (!strcmp(argv[i],"--csv")) {
