@@ -378,18 +378,22 @@ static void randomizeClientKey(client c) {
     size_t i;
 
     for (i = 0; i < c->randlen; i++) {
-        char *p = c->randptr[i]+11;
+        char *p = c->randptr[i]+7;
 
         size_t r = 0;
         if (config.randomkeys_keyspacelen != 0) {
-            double z = config.zipf_shape;
-            r = (size_t)ceil(
-                pow(1.0 - drand48() * (1 - 1.0 / pow(config.randomkeys_keyspacelen, z)), -1.0 / z)
-            );
+            if (config.zipf_shape != 0) {
+                double z = config.zipf_shape;
+                r = (size_t)floor(
+                    pow(1.0 - drand48() * (1 - 1.0 / pow(config.randomkeys_keyspacelen, z)), -1.0 / z)
+                );
+            } else  {
+                r = random() % config.randomkeys_keyspacelen;
+            }
         }
 
         size_t j;
-        for (j = 0; j < 12; j++) {
+        for (j = 0; j < 8; j++) {
             *p = '0'+r%10;
             r/=10;
             p--;
@@ -756,14 +760,14 @@ static client createClient(char *cmd, size_t len, client from, int thread_id) {
             c->randlen = 0;
             c->randfree = RANDPTR_INITIAL_SIZE;
             c->randptr = zmalloc(sizeof(char*)*c->randfree);
-            while ((p = strstr(p,"__rand_int__")) != NULL) {
+            while ((p = strstr(p,"__rint__")) != NULL) {
                 if (c->randfree == 0) {
                     c->randptr = zrealloc(c->randptr,sizeof(char*)*c->randlen*2);
                     c->randfree += c->randlen;
                 }
                 c->randptr[c->randlen++] = p;
                 c->randfree--;
-                p += 12; /* 12 is strlen("__rand_int__). */
+                p += 8; /* 8 is strlen("__rint__). */
             }
         }
     }
@@ -1892,13 +1896,13 @@ int main(int argc, char **argv) {
         }
 
         if (test_is_selected("set")) {
-            len = redisFormatCommand(&cmd,"SET key%s:__rand_int__ %s",tag,data);
+            len = redisFormatCommand(&cmd,"SET %s__rint__ %s",tag,data);
             benchmark("SET",cmd,len);
             free(cmd);
         }
 
         if (test_is_selected("get")) {
-            len = redisFormatCommand(&cmd,"GET key%s:__rand_int__",tag);
+            len = redisFormatCommand(&cmd,"GET %s__rint__",tag);
             benchmark("GET",cmd,len);
             free(cmd);
         }
